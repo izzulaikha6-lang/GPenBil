@@ -1,0 +1,1020 @@
+<!DOCTYPE html>
+<html lang="ms">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Kenyalang Chatbox AI - Belajar Bahasa Melayu</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Three.js -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <!-- GSAP for smooth animations -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            orange: '#FF8C00',
+                            yellow: '#FFD700',
+                            black: '#222222',
+                            white: '#FFFFFF',
+                            green: '#4CAF50',
+                            blue: '#4FC3F7',
+                            soft: '#F4F7F6'
+                        }
+                    },
+                    fontFamily: {
+                        sans: ['"Comic Sans MS"', '"Chalkboard SE"', '"Nunito"', 'sans-serif'],
+                    },
+                    animation: {
+                        'bounce-slow': 'bounce 3s infinite',
+                        'pulse-fast': 'pulse 1s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body {
+            background: linear-gradient(135deg, #a8edea 0%, #fed6e3 100%); /* Cheerful tropical gradient */
+            overflow: hidden; /* Prevent scrolling, app-like feel */
+            touch-action: none; /* Prevent pull-to-refresh on mobile */
+        }
+
+        #canvas-container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 30%; /* Reduced for smaller bird, larger chat */
+            z-index: 10;
+            pointer-events: none; /* Let clicks pass through if needed, though mostly display */
+        }
+
+        @media (min-width: 768px) {
+            #canvas-container {
+                height: 100%;
+                width: 40%; /* Reduced from 50% */
+                left: 0;
+            }
+        }
+
+        #chat-interface {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            height: 70%; /* Increased for larger chat */
+            z-index: 20;
+            background: rgba(255, 255, 255, 0.95);
+            border-top-left-radius: 30px;
+            border-top-right-radius: 30px;
+            box-shadow: 0 -10px 40px rgba(0,0,0,0.1);
+            display: flex;
+            flex-direction: column;
+        }
+
+        @media (min-width: 768px) {
+            #chat-interface {
+                height: 90%;
+                width: 58%; /* Increased from 45% */
+                right: 1%;
+                left: auto;
+                bottom: 5%;
+                border-radius: 30px;
+                box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+            }
+        }
+
+        .chat-bubble {
+            max-width: 85%;
+            padding: 12px 18px;
+            border-radius: 20px;
+            margin-bottom: 12px;
+            font-size: 1.1rem;
+            line-height: 1.4;
+            animation: popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+            transform-origin: bottom;
+            word-wrap: break-word;
+        }
+
+        .chat-user {
+            background: #4FC3F7;
+            color: #111;
+            align-self: flex-end;
+            border-bottom-right-radius: 5px;
+        }
+
+        .chat-bot {
+            background: #F0F4F8;
+            color: #333;
+            align-self: flex-start;
+            border-bottom-left-radius: 5px;
+            border: 2px solid #E2E8F0;
+            display: flex;
+            gap: 10px;
+        }
+
+        .chat-bot p {
+            margin: 0 0 8px 0;
+        }
+        .chat-bot p:last-child {
+            margin: 0;
+        }
+
+        @keyframes popIn {
+            from { opacity: 0; transform: scale(0.8) translateY(10px); }
+            to { opacity: 1; transform: scale(1) translateY(0); }
+        }
+
+        .typing-indicator span {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            background-color: #FF8C00;
+            border-radius: 50%;
+            margin: 0 2px;
+            animation: bounce 1.4s infinite ease-in-out both;
+        }
+
+        .typing-indicator span:nth-child(1) { animation-delay: -0.32s; }
+        .typing-indicator span:nth-child(2) { animation-delay: -0.16s; }
+
+        @keyframes bounce {
+            0%, 80%, 100% { transform: scale(0); }
+            40% { transform: scale(1); }
+        }
+
+        /* Star Animation for correct answer */
+        .star {
+            position: absolute;
+            width: 30px;
+            height: 30px;
+            background: #FFD700;
+            clip-path: polygon(50% 0%, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%);
+            opacity: 0;
+            z-index: 100;
+            pointer-events: none;
+        }
+
+        /* Custom Scrollbar */
+        #chat-history::-webkit-scrollbar { width: 6px; }
+        #chat-history::-webkit-scrollbar-track { background: transparent; }
+        #chat-history::-webkit-scrollbar-thumb { background-color: #cbd5e1; border-radius: 10px; }
+
+        .btn-icon {
+            transition: transform 0.1s, background-color 0.2s;
+        }
+        .btn-icon:active { transform: scale(0.9); }
+        
+        .recording {
+            animation: pulse-red 1.5s infinite;
+        }
+        @keyframes pulse-red {
+            0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); }
+            70% { box-shadow: 0 0 0 10px rgba(239, 68, 68, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+        }
+    </style>
+</head>
+<body class="font-sans text-gray-800 antialiased h-screen w-screen flex flex-col md:flex-row">
+
+    <!-- 3D Canvas Area -->
+    <div id="canvas-container"></div>
+
+    <!-- Chat Interface -->
+    <div id="chat-interface" class="flex flex-col">
+        <!-- Header -->
+        <div class="bg-brand-orange text-white p-4 rounded-t-[30px] flex justify-between items-center shrink-0 shadow-md z-10">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 bg-white rounded-full flex items-center justify-center text-2xl font-bold text-brand-orange border-2 border-brand-yellow">
+                    K
+                </div>
+                <div>
+                    <h1 class="text-xl font-bold">Kenyalang AI</h1>
+                    <p class="text-xs text-brand-yellow font-semibold tracking-wide">Pakar Penjodoh Bilangan</p>
+                </div>
+            </div>
+            <button id="btn-quiz-mode" class="bg-brand-yellow text-brand-orange font-bold py-1 px-3 rounded-full text-sm shadow hover:bg-white transition">
+                Mod Kuiz 🎮
+            </button>
+        </div>
+
+        <!-- Chat History -->
+        <div id="chat-history" class="flex-1 p-4 overflow-y-auto flex flex-col gap-2 relative bg-brand-soft">
+            <!-- Initial Greeting -->
+            <div class="chat-bubble chat-bot">
+                <div class="w-8 h-8 rounded-full bg-brand-orange text-white flex items-center justify-center font-bold shrink-0 mt-1 shadow-sm">K</div>
+                <div class="flex-1 ml-3">
+                    <p class="font-bold text-brand-orange mb-1 text-sm">Kenyalang</p>
+                    <div class="text-gray-800">
+                        <p class="mb-1">Hai! Nama saya Kenyalang. 🐦</p>
+                        <p class="mb-1">Saya di sini untuk bantu kamu belajar. Kamu boleh tanya tentang <strong>Penjodoh Bilangan</strong> atau apa-apa sahaja <strong>soalan umum</strong> yang lain!</p>
+                    </div>
+                    <button onclick="window.playVoice('Hai! Nama saya Kenyalang. Saya di sini untuk bantu kamu belajar. Kamu boleh tanya tentang Penjodoh Bilangan atau apa-apa sahaja soalan umum yang lain!', this)" class="mt-2 text-xs text-brand-orange hover:bg-brand-orange hover:text-white border border-brand-orange rounded-full px-2 py-1 flex items-center gap-1 transition-colors">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" /></svg> Dengar
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Input Area -->
+        <div class="p-3 bg-white border-t border-gray-100 rounded-b-[30px] shrink-0">
+            <div class="flex items-center gap-2 bg-gray-50 rounded-full p-1 border-2 border-gray-200 focus-within:border-brand-orange transition-colors">
+                
+                <button id="btn-mic" class="btn-icon w-10 h-10 rounded-full bg-gray-200 text-gray-600 flex items-center justify-center hover:bg-gray-300 relative group" title="Bercakap">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+                    </svg>
+                </button>
+
+                <input type="text" id="chat-input" class="flex-1 bg-transparent px-3 py-2 outline-none text-lg" placeholder="Tanya soalan di sini..." autocomplete="off">
+                
+                <button id="btn-send" class="btn-icon w-10 h-10 rounded-full bg-brand-orange text-white flex items-center justify-center shadow-md hover:bg-orange-600">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 ml-1" viewBox="0 0 20 20" fill="currentColor">
+                        <path d="M10.894 2.553a1 1 0 00-1.788 0l-7 14a1 1 0 001.169 1.409l5-1.429A1 1 0 009 15.571V11a1 1 0 112 0v4.571a1 1 0 00.725.962l5 1.428a1 1 0 001.17-1.408l-7-14z" />
+                    </svg>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Hidden audio element for TTS -->
+    <audio id="tts-audio" class="hidden"></audio>
+
+    <script type="module">
+        const API_KEY = ""; // Intentionally empty for Canvas environment
+
+        // --- Application State ---
+        let isQuizMode = false;
+        let isRecording = false;
+        let isSpeaking = false;
+        let lastBotMessage = "";
+        let chatHistory = []; // For LLM context
+
+        // --- DOM Elements ---
+        const chatHistoryEl = document.getElementById('chat-history');
+        const chatInput = document.getElementById('chat-input');
+        const btnSend = document.getElementById('btn-send');
+        const btnMic = document.getElementById('btn-mic');
+        const btnQuiz = document.getElementById('btn-quiz-mode');
+        const ttsAudio = document.getElementById('tts-audio');
+
+        // ==========================================
+        // 1. THREE.JS PROCEDURAL KENYALANG SETUP
+        // ==========================================
+        const container = document.getElementById('canvas-container');
+        const scene = new THREE.Scene();
+        
+        // Setup Camera
+        const camera = new THREE.PerspectiveCamera(45, container.clientWidth / container.clientHeight, 0.1, 100);
+        // Position camera differently based on screen size (responsive 3D) - Moved back to make bird smaller
+        const isMobile = window.innerWidth < 768;
+        camera.position.set(0, isMobile ? 1.0 : 0.5, isMobile ? 10 : 8);
+
+        // Setup Renderer
+        const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
+        renderer.setSize(container.clientWidth, container.clientHeight);
+        renderer.setPixelRatio(window.devicePixelRatio);
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        container.appendChild(renderer.domElement);
+
+        // Lighting
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+        scene.add(ambientLight);
+        
+        const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+        dirLight.position.set(5, 10, 5);
+        dirLight.castShadow = true;
+        scene.add(dirLight);
+
+        // --- Build Procedural Bird ---
+        const birdGroup = new THREE.Group();
+        
+        // Materials
+        const matBlack = new THREE.MeshPhongMaterial({ color: 0x1a1a1a, flatShading: true });
+        const matWhite = new THREE.MeshPhongMaterial({ color: 0xffffff, flatShading: true });
+        const matOrange = new THREE.MeshPhongMaterial({ color: 0xff6600, flatShading: true });
+        const matYellow = new THREE.MeshPhongMaterial({ color: 0xffcc00, flatShading: true });
+
+        // Body
+        const bodyGeo = new THREE.SphereGeometry(1.2, 16, 16);
+        const body = new THREE.Mesh(bodyGeo, matBlack);
+        body.scale.set(1, 1.3, 1);
+        body.position.y = -0.5;
+        body.castShadow = true;
+        birdGroup.add(body);
+
+        // Belly
+        const bellyGeo = new THREE.SphereGeometry(1.0, 16, 16, 0, Math.PI * 2, 0, Math.PI * 0.4);
+        const belly = new THREE.Mesh(bellyGeo, matWhite);
+        belly.scale.set(1, 1.2, 1.1);
+        belly.position.set(0, -0.6, 0.1);
+        belly.rotation.x = Math.PI / 8;
+        birdGroup.add(belly);
+
+        // Head Group (for nodding/talking)
+        const headGroup = new THREE.Group();
+        headGroup.position.y = 1.0;
+        birdGroup.add(headGroup);
+
+        // Head shape
+        const headGeo = new THREE.SphereGeometry(0.8, 16, 16);
+        const head = new THREE.Mesh(headGeo, matBlack);
+        headGroup.add(head);
+
+        // Beak Group (for talking animation)
+        const beakGroup = new THREE.Group();
+        beakGroup.position.set(0, 0, 0.6);
+        headGroup.add(beakGroup);
+
+        // Top Beak
+        const topBeakGeo = new THREE.ConeGeometry(0.3, 1.5, 16);
+        const topBeak = new THREE.Mesh(topBeakGeo, matYellow);
+        topBeak.rotation.x = Math.PI / 2;
+        topBeak.position.set(0, 0, 0.75);
+        beakGroup.add(topBeak);
+
+        // Casque (The Horn on top)
+        const casqueGeo = new THREE.CylinderGeometry(0.15, 0.25, 1.2, 16);
+        const casque = new THREE.Mesh(casqueGeo, matOrange);
+        casque.rotation.x = Math.PI / 2;
+        casque.position.set(0, 0.25, 0.5);
+        casque.scale.z = 1.5;
+        // Curve the casque slightly
+        const curve = new THREE.QuadraticBezierCurve3(
+            new THREE.Vector3(0, 0.2, 0),
+            new THREE.Vector3(0, 0.5, 0.5),
+            new THREE.Vector3(0, 0.1, 1.2)
+        );
+        const tubeGeo = new THREE.TubeGeometry(curve, 20, 0.2, 8, false);
+        const tubeCasque = new THREE.Mesh(tubeGeo, matOrange);
+        headGroup.add(tubeCasque);
+
+
+        // Bottom Beak (Jaw)
+        const jawGroup = new THREE.Group();
+        jawGroup.position.set(0, -0.1, 0.6);
+        headGroup.add(jawGroup);
+        
+        const bottomBeakGeo = new THREE.ConeGeometry(0.25, 1.3, 16);
+        const bottomBeak = new THREE.Mesh(bottomBeakGeo, matYellow);
+        bottomBeak.rotation.x = Math.PI / 2;
+        bottomBeak.position.set(0, -0.05, 0.65);
+        jawGroup.add(bottomBeak);
+
+        // Eyes
+        const eyeGeo = new THREE.SphereGeometry(0.15, 16, 16);
+        const pupilGeo = new THREE.SphereGeometry(0.06, 16, 16);
+        const matPupil = new THREE.MeshBasicMaterial({color: 0x000000});
+
+        const leftEye = new THREE.Mesh(eyeGeo, matWhite);
+        leftEye.position.set(-0.35, 0.2, 0.6);
+        const leftPupil = new THREE.Mesh(pupilGeo, matPupil);
+        leftPupil.position.set(0, 0, 0.12);
+        leftEye.add(leftPupil);
+        headGroup.add(leftEye);
+
+        const rightEye = new THREE.Mesh(eyeGeo, matWhite);
+        rightEye.position.set(0.35, 0.2, 0.6);
+        const rightPupil = new THREE.Mesh(pupilGeo, matPupil);
+        rightPupil.position.set(0, 0, 0.12);
+        rightEye.add(rightPupil);
+        headGroup.add(rightEye);
+
+        // Wings
+        const wingGeo = new THREE.ConeGeometry(0.5, 2, 16);
+        const leftWingGroup = new THREE.Group();
+        leftWingGroup.position.set(-1.1, 0, 0);
+        
+        const leftWing = new THREE.Mesh(wingGeo, matBlack);
+        leftWing.position.set(0, -0.5, 0);
+        leftWing.rotation.z = Math.PI / 8;
+        leftWingGroup.add(leftWing);
+        birdGroup.add(leftWingGroup);
+
+        const rightWingGroup = new THREE.Group();
+        rightWingGroup.position.set(1.1, 0, 0);
+        
+        const rightWing = new THREE.Mesh(wingGeo, matBlack);
+        rightWing.position.set(0, -0.5, 0);
+        rightWing.rotation.z = -Math.PI / 8;
+        rightWingGroup.add(rightWing);
+        birdGroup.add(rightWingGroup);
+
+        // Tail
+        const tailGeo = new THREE.BoxGeometry(0.6, 0.1, 1.5);
+        const tail = new THREE.Mesh(tailGeo, matBlack);
+        tail.position.set(0, -1.2, -1);
+        tail.rotation.x = Math.PI / 6;
+        birdGroup.add(tail);
+
+        // Add bird to scene, move it up slightly
+        birdGroup.position.y = 0.5;
+        // Turn slightly to face chat if on desktop
+        if(!isMobile) birdGroup.rotation.y = Math.PI / 8;
+        scene.add(birdGroup);
+
+        // --- Animations State ---
+        let clock = new THREE.Clock();
+        let isNodding = false;
+        let isFlapping = false;
+        let isThinking = false;
+        
+        // Blink interval
+        setInterval(() => {
+            gsap.to([leftEye.scale, rightEye.scale], {
+                y: 0.1, duration: 0.1, yoyo: true, repeat: 1
+            });
+        }, 4000);
+
+        // Render Loop
+        function animate() {
+            requestAnimationFrame(animate);
+            const time = clock.getElapsedTime();
+
+            // Idle Bobbing
+            if (!isFlapping) {
+                birdGroup.position.y = 0.5 + Math.sin(time * 2) * 0.05;
+                leftWingGroup.rotation.z = Math.sin(time * 1) * 0.1;
+                rightWingGroup.rotation.z = -Math.sin(time * 1) * 0.1;
+            }
+
+            // Talking animation (Jaw moving)
+            if (isSpeaking) {
+                jawGroup.rotation.x = Math.sin(time * 15) * 0.15;
+                headGroup.rotation.x = Math.sin(time * 5) * 0.05; // slight nod while talking
+            } else {
+                jawGroup.rotation.x = 0;
+                if(!isNodding && !isThinking) headGroup.rotation.x = 0;
+            }
+
+            // Thinking animation
+            if(isThinking) {
+                 headGroup.rotation.z = Math.sin(time * 3) * 0.1;
+                 headGroup.rotation.x = -0.1; // look down slightly
+                 headGroup.rotation.y = Math.sin(time * 2) * 0.2;
+            } else if (!isMobile) {
+                 // Reset and slightly look towards chat
+                 gsap.to(headGroup.rotation, {x:0, y: Math.PI / 12, z:0, duration: 0.5});
+            } else {
+                 gsap.to(headGroup.rotation, {x:0, y: 0, z:0, duration: 0.5});
+            }
+
+            renderer.render(scene, camera);
+        }
+        animate();
+
+        // Responsive Resize
+        window.addEventListener('resize', () => {
+            const isMob = window.innerWidth < 768;
+            camera.aspect = container.clientWidth / container.clientHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(container.clientWidth, container.clientHeight);
+            camera.position.set(0, isMob ? 1.0 : 0.5, isMob ? 10 : 8); // Updated resize pos
+            if(!isMob) gsap.to(birdGroup.rotation, {y: Math.PI / 8, duration: 0.5});
+            else gsap.to(birdGroup.rotation, {y: 0, duration: 0.5});
+        });
+
+        // Specific Animation triggers
+        function triggerHappyAnimation() {
+            isFlapping = true;
+            // Flap wings fast
+            gsap.to([leftWingGroup.rotation, rightWingGroup.rotation], {
+                z: (i) => i === 0 ? Math.PI/4 : -Math.PI/4, 
+                duration: 0.1, 
+                yoyo: true, 
+                repeat: 5,
+                onComplete: () => isFlapping = false
+            });
+            // Jump up
+            gsap.to(birdGroup.position, {
+                y: 1.5,
+                duration: 0.3,
+                yoyo: true,
+                repeat: 1
+            });
+            createStars();
+        }
+
+        function triggerNodAnimation() {
+            isNodding = true;
+            gsap.to(headGroup.rotation, {
+                x: Math.PI / 6,
+                duration: 0.2,
+                yoyo: true,
+                repeat: 1,
+                onComplete: () => isNodding = false
+            });
+        }
+
+        function createStars() {
+            const colors = ['#FFD700', '#FF8C00', '#4CAF50', '#4FC3F7'];
+            for(let i=0; i<10; i++) {
+                const star = document.createElement('div');
+                star.className = 'star';
+                star.style.background = colors[Math.floor(Math.random() * colors.length)];
+                
+                // Position relative to bird (approx center top screen)
+                const isMob = window.innerWidth < 768;
+                const startX = isMob ? window.innerWidth/2 : window.innerWidth * 0.25;
+                const startY = isMob ? window.innerHeight * 0.2 : window.innerHeight * 0.4;
+
+                star.style.left = startX + 'px';
+                star.style.top = startY + 'px';
+                document.body.appendChild(star);
+
+                const angle = Math.random() * Math.PI * 2;
+                const distance = 100 + Math.random() * 150;
+
+                gsap.to(star, {
+                    x: Math.cos(angle) * distance,
+                    y: Math.sin(angle) * distance - 50,
+                    rotation: Math.random() * 360,
+                    opacity: 1,
+                    duration: 0.5,
+                    ease: "power2.out",
+                    onComplete: () => {
+                        gsap.to(star, {
+                            opacity: 0,
+                            duration: 0.5,
+                            delay: 0.5,
+                            onComplete: () => star.remove()
+                        });
+                    }
+                });
+            }
+        }
+
+        // ==========================================
+        // 2. SPEECH RECOGNITION (Web Speech API)
+        // ==========================================
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        let recognition = null;
+
+        if (SpeechRecognition) {
+            recognition = new SpeechRecognition();
+            recognition.lang = 'ms-MY'; // Bahasa Melayu Malaysia
+            recognition.interimResults = false;
+            recognition.maxAlternatives = 1;
+
+            recognition.onstart = function() {
+                isRecording = true;
+                btnMic.classList.add('recording', 'bg-red-500', 'text-white');
+                btnMic.classList.remove('bg-gray-200', 'text-gray-600');
+                chatInput.placeholder = "Mendengar...";
+            };
+
+            recognition.onresult = function(event) {
+                const transcript = event.results[0][0].transcript;
+                chatInput.value = transcript;
+                handleSendMessage(); // Auto send after speaking
+            };
+
+            recognition.onerror = function(event) {
+                console.error("Speech recognition error", event.error);
+                stopRecordingUI();
+                alertMsg("Maaf, Kenyalang tidak dapat mendengar suara kamu dengan jelas.");
+            };
+
+            recognition.onend = function() {
+                stopRecordingUI();
+            };
+        } else {
+            console.warn("Speech Recognition API not supported in this browser.");
+            btnMic.style.display = 'none'; // Hide mic button if not supported
+        }
+
+        function stopRecordingUI() {
+            isRecording = false;
+            btnMic.classList.remove('recording', 'bg-red-500', 'text-white');
+            btnMic.classList.add('bg-gray-200', 'text-gray-600');
+            chatInput.placeholder = "Tanya soalan di sini...";
+        }
+
+        btnMic.addEventListener('click', () => {
+            if (isRecording) {
+                recognition.stop();
+            } else if (recognition) {
+                // Stop any playing TTS
+                ttsAudio.pause();
+                isSpeaking = false;
+                recognition.start();
+            }
+        });
+
+
+        // ==========================================
+        // 3. GEMINI API LOGIC (Text & TTS)
+        // ==========================================
+
+        // Helper to convert base64 PCM to WAV for playback
+        function base64ToArrayBuffer(base64) {
+            const binaryString = window.atob(base64);
+            const len = binaryString.length;
+            const bytes = new Uint8Array(len);
+            for (let i = 0; i < len; i++) {
+                bytes[i] = binaryString.charCodeAt(i);
+            }
+            return bytes.buffer;
+        }
+
+        function pcmToWav(pcmData, sampleRate) {
+            const numChannels = 1;
+            const bitsPerSample = 16;
+            const byteRate = sampleRate * numChannels * (bitsPerSample / 8);
+            const blockAlign = numChannels * (bitsPerSample / 8);
+            const dataSize = pcmData.length * 2;
+            const buffer = new ArrayBuffer(44 + dataSize);
+            const view = new DataView(buffer);
+
+            const writeString = (view, offset, string) => {
+                for (let i = 0; i < string.length; i++) {
+                    view.setUint8(offset + i, string.charCodeAt(i));
+                }
+            };
+
+            writeString(view, 0, 'RIFF');
+            view.setUint32(4, 36 + dataSize, true);
+            writeString(view, 8, 'WAVE');
+            writeString(view, 12, 'fmt ');
+            view.setUint32(16, 16, true);
+            view.setUint16(20, 1, true);
+            view.setUint16(22, numChannels, true);
+            view.setUint32(24, sampleRate, true);
+            view.setUint32(28, byteRate, true);
+            view.setUint16(32, blockAlign, true);
+            view.setUint16(34, bitsPerSample, true);
+            writeString(view, 36, 'data');
+            view.setUint32(40, dataSize, true);
+
+            let offset = 44;
+            for (let i = 0; i < pcmData.length; i++) {
+                view.setInt16(offset, pcmData[i], true);
+                offset += 2;
+            }
+            return new Blob([buffer], { type: 'audio/wav' });
+        }
+
+        const SYSTEM_PROMPT = `
+Kamu ialah Kenyalang, seekor burung enggang yang comel, pintar, dan mesra.
+Peranan kamu ialah sebagai pembantu AI pendidikan untuk murid sekolah rendah (umur 7-12 tahun) di Malaysia.
+Kepakaran utama kamu ialah 'Penjodoh Bilangan' dalam Bahasa Melayu, TETAPI kamu juga BOLEH menjawab soalan-soalan umum yang lain (contoh: sains, sejarah, matematik, dll).
+
+**GAYA JAWAPAN WAJIB:**
+1. Gunakan Bahasa Melayu baku Malaysia yang mudah, ceria, dan tidak formal sangat (seperti bercakap dengan kanak-kanak).
+2. Ayat mestilah SANGAT PENDEK dan RINGKAS. Jangan buat perenggan panjang supaya audio boleh dijawab pantas.
+3. JIKA soalan tentang penjodoh bilangan, formatnya: Nyatakan jawapan, penerangan ringkas, dan satu contoh ayat.
+4. JIKA soalan umum, jawab dengan tepat, ringkas, mudah difahami kanak-kanak dan kaitkan dengan fakta menarik jika sesuai.
+
+**MOD KUIZ:**
+Jika pengguna meminta kuiz atau Mod Kuiz aktif, berikan SATU soalan aneka pilihan (A, B, C) berkaitan penjodoh bilangan. Jangan beri jawapan terus.
+Tunggu pengguna jawab, kemudian puji mereka jika betul (guna perkataan seperti "Hebat!", "Tepat sekali!") atau beri semangat jika salah ("Cuba lagi!", "Hampir tepat!").
+`;
+
+        // Initialize Chat Context
+        chatHistory = [{ role: "user", parts: [{ text: SYSTEM_PROMPT }] }];
+
+        async function generateText(userPrompt) {
+            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${API_KEY}`;
+            
+            // Add user message to history
+            chatHistory.push({ role: "user", parts: [{ text: userPrompt }] });
+
+            const payload = {
+                contents: chatHistory,
+                generationConfig: { temperature: 0.7 } // Slightly creative but focused
+            };
+
+            try {
+                const response = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                
+                const result = await response.json();
+                if (result.candidates && result.candidates[0].content) {
+                    const botReply = result.candidates[0].content.parts[0].text;
+                    // Save bot reply to history
+                    chatHistory.push({ role: "model", parts: [{ text: botReply }] });
+                    return botReply;
+                }
+                throw new Error("Invalid format");
+            } catch (error) {
+                console.error("Text Gen Error:", error);
+                // Remove the failed user prompt from history to keep it clean
+                chatHistory.pop();
+                return "Maaf, Kenyalang sedang pening sedikit. Boleh tanya semula?";
+            }
+        }
+
+        async function generateSpeech(text) {
+            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent?key=${API_KEY}`;
+            
+            // Cleanup text for TTS (remove bold markdown, and strip Emojis that crash the TTS engine)
+            const cleanText = text.replace(/\*\*/g, '').replace(/\*/g, '')
+                                  .replace(/[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F700}-\u{1F77F}\u{1F780}-\u{1F7FF}\u{1F800}-\u{1F8FF}\u{1F900}-\u{1F9FF}\u{1FA00}-\u{1FA6F}\u{1FA70}-\u{1FAFF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/gu, '')
+                                  .trim();
+
+            const payload = {
+                contents: [{ parts: [{ text: `Say cheerfully, clearly and speak quickly in Bahasa Melayu: ${cleanText}` }] }],
+                generationConfig: {
+                    responseModalities: ["AUDIO"],
+                    speechConfig: {
+                        voiceConfig: {
+                            // Using Leda for a youthful, friendly tone suitable for a mascot
+                            prebuiltVoiceConfig: { voiceName: "Leda" } 
+                        }
+                    }
+                },
+                model: "gemini-2.5-flash-preview-tts"
+            };
+
+            try {
+                const response = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                const result = await response.json();
+                
+                const part = result?.candidates?.[0]?.content?.parts?.[0];
+                if (part && part.inlineData && part.inlineData.data) {
+                    const audioBase64 = part.inlineData.data;
+                    const mimeType = part.inlineData.mimeType || "audio/pcm;rate=24000";
+                    const sampleRateMatch = mimeType.match(/rate=(\d+)/);
+                    const sampleRate = sampleRateMatch ? parseInt(sampleRateMatch[1], 10) : 24000;
+                    
+                    const pcmBuffer = base64ToArrayBuffer(audioBase64);
+                    const pcm16 = new Int16Array(pcmBuffer);
+                    const wavBlob = pcmToWav(pcm16, sampleRate);
+                    return URL.createObjectURL(wavBlob);
+                } else {
+                    console.error("Invalid TTS Response:", result);
+                }
+            } catch (error) {
+                console.error("TTS Error:", error);
+            }
+            return null;
+        }
+
+        // ==========================================
+        // 4. UI INTERACTION LOGIC
+        // ==========================================
+
+        function addMessageToUI(sender, text, isHtml = false) {
+            const msgDiv = document.createElement('div');
+            
+            if (sender === 'user') {
+                msgDiv.className = 'chat-bubble chat-user';
+                msgDiv.textContent = text;
+            } else {
+                msgDiv.className = 'chat-bubble chat-bot';
+                
+                // Avatar
+                const avatar = document.createElement('div');
+                avatar.className = 'w-8 h-8 rounded-full bg-brand-orange text-white flex items-center justify-center font-bold shrink-0 mt-1 shadow-sm';
+                avatar.textContent = 'K';
+                
+                const content = document.createElement('div');
+                content.className = 'flex-1';
+                
+                const name = document.createElement('p');
+                name.className = 'font-bold text-brand-orange text-sm mb-1';
+                name.textContent = 'Kenyalang';
+                
+                const body = document.createElement('div');
+                body.className = 'text-gray-800';
+                if (isHtml) {
+                    // Format response: split by newlines, wrap in <p>
+                    const formattedText = text.split('\n').filter(line => line.trim() !== '').map(line => `<p class="mb-1">${line.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')}</p>`).join('');
+                    body.innerHTML = formattedText;
+                } else {
+                    body.textContent = text;
+                }
+                
+                // Create Play Button for this specific message
+                const playBtn = document.createElement('button');
+                playBtn.className = 'mt-2 text-xs text-brand-orange hover:bg-brand-orange hover:text-white border border-brand-orange rounded-full px-2 py-1 flex items-center gap-1 transition-colors';
+                playBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" /></svg> Dengar`;
+                playBtn.onclick = () => {
+                    if (isSpeaking) ttsAudio.pause();
+                    playVoice(text, playBtn);
+                };
+
+                const contentWrapper = document.createElement('div');
+                contentWrapper.appendChild(body);
+                contentWrapper.appendChild(playBtn);
+                
+                content.appendChild(name);
+                content.appendChild(contentWrapper);
+                
+                msgDiv.appendChild(avatar);
+                msgDiv.appendChild(content);
+            }
+            
+            chatHistoryEl.appendChild(msgDiv);
+            scrollToBottom();
+        }
+
+        function showTypingIndicator() {
+            const wrapper = document.createElement('div');
+            wrapper.id = 'typing-indicator-wrapper';
+            wrapper.className = 'chat-bubble chat-bot opacity-70';
+            
+            const avatar = document.createElement('div');
+            avatar.className = 'w-8 h-8 rounded-full bg-gray-300 text-white flex items-center justify-center font-bold shrink-0 mt-1';
+            avatar.textContent = 'K';
+            
+            const content = document.createElement('div');
+            content.className = 'flex items-center h-full px-2';
+            
+            const typing = document.createElement('div');
+            typing.className = 'typing-indicator';
+            typing.innerHTML = '<span></span><span></span><span></span>';
+            
+            content.appendChild(typing);
+            wrapper.appendChild(avatar);
+            wrapper.appendChild(content);
+            
+            chatHistoryEl.appendChild(wrapper);
+            scrollToBottom();
+            
+            // Trigger thinking animation
+            isThinking = true;
+        }
+
+        function removeTypingIndicator() {
+            const ind = document.getElementById('typing-indicator-wrapper');
+            if (ind) ind.remove();
+            isThinking = false;
+        }
+
+        function scrollToBottom() {
+            chatHistoryEl.scrollTop = chatHistoryEl.scrollHeight;
+        }
+
+        function alertMsg(msg) {
+            // Replaces window.alert
+            const alertDiv = document.createElement('div');
+            alertDiv.className = 'fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-white p-6 rounded-2xl shadow-2xl z-50 text-center max-w-sm w-[90%]';
+            alertDiv.innerHTML = `
+                <h3 class="text-xl font-bold text-brand-orange mb-2">Makluman</h3>
+                <p class="mb-4">${msg}</p>
+                <button class="bg-brand-orange text-white px-6 py-2 rounded-full font-bold hover:bg-orange-600 transition" onclick="this.parentElement.remove()">Tutup</button>
+            `;
+            document.body.appendChild(alertDiv);
+        }
+
+        async function handleSendMessage() {
+            const message = chatInput.value.trim();
+            if (!message) return;
+
+            // Stop current audio if playing
+            ttsAudio.pause();
+            isSpeaking = false;
+
+            // UI Updates
+            chatInput.value = '';
+            addMessageToUI('user', message);
+            showTypingIndicator();
+
+            // Check for gamification trigger words (client side evaluation logic enhancement)
+            const lowerMsg = message.toLowerCase();
+            const isPraiseExpected = lowerMsg.includes('betul') || lowerMsg.includes('hebat') || lowerMsg.includes('bagus');
+            
+            // 1. Get Text Response from Gemini
+            let responseText = await generateText(isQuizMode ? `Saya pilih: ${message}. Adakah ini betul? Jika betul puji saya.` : message);
+            
+            removeTypingIndicator();
+            lastBotMessage = responseText;
+
+            // 2. Play animations based on text sentiment (simple heuristic)
+            if (responseText.toLowerCase().includes('bagus') || responseText.toLowerCase().includes('tahniah') || responseText.toLowerCase().includes('hebat') || responseText.toLowerCase().includes('tepat')) {
+                triggerHappyAnimation();
+            } else {
+                triggerNodAnimation();
+            }
+
+            // 3. Add to UI
+            addMessageToUI('bot', responseText, true);
+
+            // 4. Generate and Play Speech
+            // Select the newly added play button to pass to playVoice
+            const chatBubbles = chatHistoryEl.querySelectorAll('.chat-bot');
+            const lastBubble = chatBubbles[chatBubbles.length - 1];
+            const latestPlayBtn = lastBubble.querySelector('button');
+            
+            playVoice(responseText, latestPlayBtn);
+        }
+
+        async function playVoice(text, btnElement = null) {
+             // Show speaking animation immediately while fetching audio
+            isSpeaking = true;
+            let originalHtml = "";
+            
+            if (btnElement) {
+                originalHtml = btnElement.innerHTML;
+                btnElement.innerHTML = '⏳ Memuat...';
+                btnElement.disabled = true;
+            }
+            
+            const audioUrl = await generateSpeech(text);
+            
+            if (audioUrl) {
+                ttsAudio.src = audioUrl;
+                ttsAudio.playbackRate = 1.15; // Diteguhkan pada paras selamat yang masih laju
+                
+                try {
+                    await ttsAudio.play();
+                } catch (e) {
+                    console.error("Autoplay blocked or failed:", e);
+                    isSpeaking = false;
+                    if (btnElement) {
+                        btnElement.innerHTML = '▶️ Sila tekan sekali lagi';
+                        btnElement.disabled = false;
+                    }
+                    return; // Stop execution if play fails
+                }
+                
+                ttsAudio.onended = () => {
+                    isSpeaking = false;
+                    if (btnElement) {
+                        btnElement.innerHTML = originalHtml;
+                        btnElement.disabled = false;
+                    }
+                };
+                
+                ttsAudio.onerror = () => {
+                    isSpeaking = false;
+                    console.error("Audio playback failed");
+                    if (btnElement) {
+                        btnElement.innerHTML = '❌ Gagal';
+                        btnElement.disabled = false;
+                    }
+                }
+            } else {
+                isSpeaking = false;
+                if (btnElement) {
+                    btnElement.innerHTML = '❌ Ralat Sistem';
+                    btnElement.disabled = false;
+                }
+            }
+        }
+        
+        // Expose playVoice to window so it can be called from inline HTML onclick (for initial message)
+        window.playVoice = playVoice;
+
+        // --- Event Listeners ---
+        btnSend.addEventListener('click', handleSendMessage);
+        chatInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') handleSendMessage();
+        });
+
+        btnRepeat.addEventListener('click', () => {
+            if (lastBotMessage && !isSpeaking) {
+                btnRepeat.classList.add('hidden');
+                triggerNodAnimation();
+                playVoice(lastBotMessage);
+            }
+        });
+
+        btnQuiz.addEventListener('click', async () => {
+            isQuizMode = !isQuizMode;
+            if (isQuizMode) {
+                btnQuiz.textContent = "Tamat Kuiz 🛑";
+                btnQuiz.classList.replace('bg-brand-yellow', 'bg-red-500');
+                btnQuiz.classList.replace('text-brand-orange', 'text-white');
+                
+                chatInput.value = "Kenyalang, berikan saya satu soalan kuiz penjodoh bilangan sekarang.";
+                handleSendMessage();
+            } else {
+                btnQuiz.textContent = "Mod Kuiz 🎮";
+                btnQuiz.classList.replace('bg-red-500', 'bg-brand-yellow');
+                btnQuiz.classList.replace('text-white', 'text-brand-orange');
+                
+                // Add system message to reset context
+                addMessageToUI('bot', "Mod kuiz ditamatkan. Ada apa-apa lagi yang kamu ingin tanya tentang Penjodoh Bilangan?", false);
+                playVoice("Mod kuiz ditamatkan. Ada apa-apa lagi yang kamu ingin tanya tentang Penjodoh Bilangan?");
+            }
+        });
+
+        // Initialize audio context on first interaction to comply with browser autoplay policies
+        document.body.addEventListener('click', function initAudio() {
+            // Create empty audio context just to unlock
+            const AudioContext = window.AudioContext || window.webkitAudioContext;
+            if(AudioContext) {
+                 const ctx = new AudioContext();
+                 ctx.resume();
+            }
+            document.body.removeEventListener('click', initAudio);
+        }, { once: true });
+
+    </script>
+</body>
+</html>
